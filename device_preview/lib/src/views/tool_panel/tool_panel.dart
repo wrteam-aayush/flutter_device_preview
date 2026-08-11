@@ -9,11 +9,8 @@ class ToolPanel extends StatelessWidget {
   ///
   /// The [isModal] indicates whether the panel is shown modally as a new page, or if it
   /// stays visible on one side of the parent layout.
-  const ToolPanel({
-    Key? key,
-    required this.slivers,
-    this.isModal = false,
-  }) : super(key: key);
+  const ToolPanel({Key? key, required this.slivers, this.isModal = false})
+    : super(key: key);
 
   /// Indicates whether the panel is shown modally as a new page, or if it
   /// stays visible on one side of the parent layout.
@@ -75,10 +72,14 @@ class _ToolPanel extends StatelessWidget {
       (DevicePreviewStore store) => store.data.isEnabled,
     );
 
+    final appName = context.select(
+      (DevicePreviewStore store) => store.data.appName,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Device preview',
+          appName ?? 'Device preview',
           style: theme.textTheme.titleLarge?.copyWith(
             fontSize: 14,
             fontWeight: FontWeight.bold,
@@ -87,37 +88,33 @@ class _ToolPanel extends StatelessWidget {
                 : theme.colorScheme.onPrimary),
           ),
         ),
-        leading: isModal
-            ? IconButton(
-                icon: const Icon(Icons.close),
-                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-                onPressed: onClose,
-              )
-            : null,
-        actions: [
-          if (!isModal)
-            Switch(
-              value: isEnabled,
-              onChanged: (v) {
-                final state = context.read<DevicePreviewStore>();
-                state.data = state.data.copyWith(isEnabled: v);
-              },
-            ),
-        ],
+        // leading: isModal
+        //     ? IconButton(
+        //         icon: const Icon(Icons.close),
+        //         tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+        //         onPressed: onClose,
+        //       )
+        //     : null,
+        // actions: [
+        //   if (!isModal)
+        //     Switch(
+        //       value: isEnabled,
+        //       onChanged: (v) {
+        //         final state = context.read<DevicePreviewStore>();
+        //         state.data = state.data.copyWith(isEnabled: v);
+        //       },
+        //     ),
+        // ],
       ),
       body: Stack(
         children: [
-          CustomScrollView(
-            slivers: sections,
-          ),
+          CustomScrollView(slivers: sections),
           IgnorePointer(
             ignoring: isEnabled,
             child: AnimatedOpacity(
               opacity: isEnabled ? 0 : 1,
               duration: const Duration(milliseconds: 200),
-              child: Container(
-                color: const Color(0xCC000000),
-              ),
+              child: Container(color: const Color(0xCC000000)),
             ),
           ),
         ],
