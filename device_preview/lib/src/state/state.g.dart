@@ -37,6 +37,7 @@ _$_DevicePreviewData _$$_DevicePreviewDataFromJson(Map<String, dynamic> json) =>
           ? null
           : CustomDeviceInfoData.fromJson(
               json['customDevice'] as Map<String, dynamic>),
+      appName: json['appName'] as String?,
     );
 
 Map<String, dynamic> _$$_DevicePreviewDataToJson(
@@ -59,6 +60,7 @@ Map<String, dynamic> _$$_DevicePreviewDataToJson(
       'textScaleFactor': instance.textScaleFactor,
       'settings': instance.settings,
       'customDevice': instance.customDevice,
+      'appName': instance.appName,
     };
 
 const _$OrientationEnumMap = {

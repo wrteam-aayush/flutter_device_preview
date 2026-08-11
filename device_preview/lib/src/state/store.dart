@@ -8,16 +8,19 @@ import '../../device_preview.dart' as device_preview;
 ///
 /// Whenever the state changes, it notifies its listener so that they can update themselves.
 class DevicePreviewStore extends ChangeNotifier {
-  /// Create a new store with the given [locales], [device] and [storage].
+  /// Create a new store with the given [locales], [device], [storage] and
+  /// [appName].
   DevicePreviewStore({
     required this.defaultDevice,
     List<Locale>? locales,
     List<DeviceInfo>? devices,
     required this.storage,
+    String? appName,
   }) {
     initialize(
       locales: locales,
       devices: devices,
+      appName: appName,
     );
   }
 
@@ -51,9 +54,13 @@ class DevicePreviewStore extends ChangeNotifier {
   );
 
   /// Initializes the state by loading data from storage (if [useStorage])
+  ///
+  /// The [appName] always wins over a persisted one, so that the value given
+  /// to the [DevicePreview] widget stays the source of truth.
   Future<void> initialize({
     List<Locale>? locales,
     List<DeviceInfo>? devices,
+    String? appName,
   }) async {
     await state.maybeWhen(
       notInitialized: () async {
@@ -96,6 +103,12 @@ class DevicePreviewStore extends ChangeNotifier {
         if (data.customDevice == null) {
           data = data.copyWith(
             customDevice: _defaultCustomDevice,
+          );
+        }
+
+        if (data.appName != appName) {
+          data = data.copyWith(
+            appName: appName,
           );
         }
         state = DevicePreviewState.initialized(

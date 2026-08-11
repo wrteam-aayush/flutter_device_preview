@@ -61,7 +61,14 @@ class DevicePreview extends StatefulWidget {
     this.enabled = true,
     this.backgroundColor,
     this.padding,
+    this.appName,
   }) : super(key: key);
+
+  /// The application name displayed in the tools instead of the default
+  /// `Device Preview` title.
+  ///
+  /// If null, the default title is used.
+  final String? appName;
 
   /// If not [enabled], the [child] is used directly.
   final bool enabled;
@@ -497,6 +504,7 @@ class _DevicePreviewState extends State<DevicePreview> {
         devices: widget.devices,
         locales: widget.availableLocales,
         storage: storage,
+        appName: widget.appName,
       ),
       builder: (context, child) {
         final isInitialized = context.select(

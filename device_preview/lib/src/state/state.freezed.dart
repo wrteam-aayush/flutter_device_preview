@@ -637,6 +637,10 @@ mixin _$DevicePreviewData {
   /// The custom device configuration
   CustomDeviceInfoData? get customDevice => throw _privateConstructorUsedError;
 
+  /// The application name displayed in the tools instead of the default
+  /// `Device Preview` title.
+  String? get appName => throw _privateConstructorUsedError;
+
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
   $DevicePreviewDataCopyWith<DevicePreviewData> get copyWith =>
@@ -665,7 +669,8 @@ abstract class $DevicePreviewDataCopyWith<$Res> {
       Map<String, Map<String, dynamic>> pluginData,
       double textScaleFactor,
       DevicePreviewSettingsData? settings,
-      CustomDeviceInfoData? customDevice});
+      CustomDeviceInfoData? customDevice,
+      String? appName});
 
   $DevicePreviewSettingsDataCopyWith<$Res>? get settings;
   $CustomDeviceInfoDataCopyWith<$Res>? get customDevice;
@@ -699,6 +704,7 @@ class _$DevicePreviewDataCopyWithImpl<$Res>
     Object? textScaleFactor = freezed,
     Object? settings = freezed,
     Object? customDevice = freezed,
+    Object? appName = freezed,
   }) {
     return _then(_value.copyWith(
       isToolbarVisible: isToolbarVisible == freezed
@@ -769,6 +775,10 @@ class _$DevicePreviewDataCopyWithImpl<$Res>
           ? _value.customDevice
           : customDevice // ignore: cast_nullable_to_non_nullable
               as CustomDeviceInfoData?,
+      appName: appName == freezed
+          ? _value.appName
+          : appName // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 
@@ -819,7 +829,8 @@ abstract class _$$_DevicePreviewDataCopyWith<$Res>
       Map<String, Map<String, dynamic>> pluginData,
       double textScaleFactor,
       DevicePreviewSettingsData? settings,
-      CustomDeviceInfoData? customDevice});
+      CustomDeviceInfoData? customDevice,
+      String? appName});
 
   @override
   $DevicePreviewSettingsDataCopyWith<$Res>? get settings;
@@ -857,6 +868,7 @@ class __$$_DevicePreviewDataCopyWithImpl<$Res>
     Object? textScaleFactor = freezed,
     Object? settings = freezed,
     Object? customDevice = freezed,
+    Object? appName = freezed,
   }) {
     return _then(_$_DevicePreviewData(
       isToolbarVisible: isToolbarVisible == freezed
@@ -927,6 +939,10 @@ class __$$_DevicePreviewDataCopyWithImpl<$Res>
           ? _value.customDevice
           : customDevice // ignore: cast_nullable_to_non_nullable
               as CustomDeviceInfoData?,
+      appName: appName == freezed
+          ? _value.appName
+          : appName // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -954,7 +970,8 @@ class _$_DevicePreviewData
           const <String, Map<String, dynamic>>{},
       this.textScaleFactor = 1.0,
       this.settings,
-      this.customDevice = null})
+      this.customDevice = null,
+      this.appName})
       : _pluginData = pluginData;
 
   factory _$_DevicePreviewData.fromJson(Map<String, dynamic> json) =>
@@ -1047,9 +1064,14 @@ class _$_DevicePreviewData
   @JsonKey()
   final CustomDeviceInfoData? customDevice;
 
+  /// The application name displayed in the tools instead of the default
+  /// `Device Preview` title.
+  @override
+  final String? appName;
+
   @override
   String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
-    return 'DevicePreviewData(isToolbarVisible: $isToolbarVisible, isEnabled: $isEnabled, orientation: $orientation, deviceIdentifier: $deviceIdentifier, locale: $locale, isFrameVisible: $isFrameVisible, isDarkMode: $isDarkMode, boldText: $boldText, isVirtualKeyboardVisible: $isVirtualKeyboardVisible, disableAnimations: $disableAnimations, highContrast: $highContrast, accessibleNavigation: $accessibleNavigation, invertColors: $invertColors, pluginData: $pluginData, textScaleFactor: $textScaleFactor, settings: $settings, customDevice: $customDevice)';
+    return 'DevicePreviewData(isToolbarVisible: $isToolbarVisible, isEnabled: $isEnabled, orientation: $orientation, deviceIdentifier: $deviceIdentifier, locale: $locale, isFrameVisible: $isFrameVisible, isDarkMode: $isDarkMode, boldText: $boldText, isVirtualKeyboardVisible: $isVirtualKeyboardVisible, disableAnimations: $disableAnimations, highContrast: $highContrast, accessibleNavigation: $accessibleNavigation, invertColors: $invertColors, pluginData: $pluginData, textScaleFactor: $textScaleFactor, settings: $settings, customDevice: $customDevice, appName: $appName)';
   }
 
   @override
@@ -1074,7 +1096,8 @@ class _$_DevicePreviewData
       ..add(DiagnosticsProperty('pluginData', pluginData))
       ..add(DiagnosticsProperty('textScaleFactor', textScaleFactor))
       ..add(DiagnosticsProperty('settings', settings))
-      ..add(DiagnosticsProperty('customDevice', customDevice));
+      ..add(DiagnosticsProperty('customDevice', customDevice))
+      ..add(DiagnosticsProperty('appName', appName));
   }
 
   @override
@@ -1111,7 +1134,8 @@ class _$_DevicePreviewData
                 .equals(other.textScaleFactor, textScaleFactor) &&
             const DeepCollectionEquality().equals(other.settings, settings) &&
             const DeepCollectionEquality()
-                .equals(other.customDevice, customDevice));
+                .equals(other.customDevice, customDevice) &&
+            const DeepCollectionEquality().equals(other.appName, appName));
   }
 
   @JsonKey(ignore: true)
@@ -1134,7 +1158,8 @@ class _$_DevicePreviewData
       const DeepCollectionEquality().hash(_pluginData),
       const DeepCollectionEquality().hash(textScaleFactor),
       const DeepCollectionEquality().hash(settings),
-      const DeepCollectionEquality().hash(customDevice));
+      const DeepCollectionEquality().hash(customDevice),
+      const DeepCollectionEquality().hash(appName));
 
   @JsonKey(ignore: true)
   @override
@@ -1166,7 +1191,8 @@ abstract class _DevicePreviewData implements DevicePreviewData {
       final Map<String, Map<String, dynamic>> pluginData,
       final double textScaleFactor,
       final DevicePreviewSettingsData? settings,
-      final CustomDeviceInfoData? customDevice}) = _$_DevicePreviewData;
+      final CustomDeviceInfoData? customDevice,
+      final String? appName}) = _$_DevicePreviewData;
 
   factory _DevicePreviewData.fromJson(Map<String, dynamic> json) =
       _$_DevicePreviewData.fromJson;
@@ -1238,6 +1264,11 @@ abstract class _DevicePreviewData implements DevicePreviewData {
 
   /// The custom device configuration
   CustomDeviceInfoData? get customDevice => throw _privateConstructorUsedError;
+  @override
+
+  /// The application name displayed in the tools instead of the default
+  /// `Device Preview` title.
+  String? get appName => throw _privateConstructorUsedError;
   @override
   @JsonKey(ignore: true)
   _$$_DevicePreviewDataCopyWith<_$_DevicePreviewData> get copyWith =>

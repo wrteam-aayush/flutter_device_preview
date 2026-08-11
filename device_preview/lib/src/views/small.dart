@@ -48,14 +48,9 @@ class DevicePreviewSmallLayout extends StatelessWidget {
                   topLeft: Radius.circular(10),
                   topRight: Radius.circular(10),
                 ),
-                child: ToolPanel(
-                  isModal: true,
-                  slivers: slivers,
-                ),
+                child: ToolPanel(isModal: true, slivers: slivers),
               ),
-              constraints: BoxConstraints(
-                maxHeight: maxMenuHeight,
-              ),
+              constraints: BoxConstraints(maxHeight: maxMenuHeight),
               backgroundColor: Colors.transparent,
             );
             await sheet?.closed;
@@ -68,9 +63,7 @@ class DevicePreviewSmallLayout extends StatelessWidget {
 }
 
 class _BottomToolbar extends StatelessWidget {
-  const _BottomToolbar({
-    required this.showPanel,
-  });
+  const _BottomToolbar({required this.showPanel});
 
   final VoidCallback showPanel;
 
@@ -79,18 +72,21 @@ class _BottomToolbar extends StatelessWidget {
     final isEnabled = context.select(
       (DevicePreviewStore store) => store.data.isEnabled,
     );
+    final appName = context.select(
+      (DevicePreviewStore store) => store.data.appName,
+    );
     return Material(
       child: ListTile(
-        title: const Text('Device Preview'),
+        title: Text(appName ?? 'Device Preview'),
         onTap: isEnabled ? showPanel : null,
         leading: const Icon(Icons.tune),
-        trailing: Switch(
-          value: isEnabled,
-          onChanged: (v) {
-            final state = context.read<DevicePreviewStore>();
-            state.data = state.data.copyWith(isEnabled: v);
-          },
-        ),
+        // trailing: Switch(
+        //   value: isEnabled,
+        //   onChanged: (v) {
+        //     final state = context.read<DevicePreviewStore>();
+        //     state.data = state.data.copyWith(isEnabled: v);
+        //   },
+        // ),
       ),
     );
   }

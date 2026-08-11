@@ -88,6 +88,10 @@ class DevicePreviewData with _$DevicePreviewData {
 
     /// The custom device configuration
     @Default(null) CustomDeviceInfoData? customDevice,
+
+    /// The application name displayed in the tools instead of the default
+    /// `Device Preview` title.
+    String? appName,
   }) = _DevicePreviewData;
 
   factory DevicePreviewData.fromJson(Map<String, dynamic> json) =>
