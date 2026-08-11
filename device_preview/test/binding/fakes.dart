@@ -471,4 +471,7 @@ class FakePlatformDispatcher implements ui.PlatformDispatcher {
 
   @override
   String get defaultRouteName => defaultRouteNameValue;
+
+  @override
+  ui.HitTestCallback? onHitTest;
 }

@@ -1,5 +1,6 @@
 import 'package:devtools_app_shared/ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/svg.dart';
 
 import 'panel_controller.dart';
 
@@ -89,52 +90,61 @@ class _Toolbar extends StatelessWidget {
 
   final PanelController controller;
 
-  Color _statusColor(BuildContext context) {
-    final theme = Theme.of(context);
-    switch (controller.status) {
-      case PanelStatus.ready:
-        return Colors.green;
-      case PanelStatus.paused:
-      case PanelStatus.disabled:
-        return Colors.orange;
-      case PanelStatus.noBinding:
-        return theme.colorScheme.error;
-      case PanelStatus.disconnected:
-        return theme.disabledColor;
-    }
-  }
+  // Color _statusColor(BuildContext context) {
+  //   final theme = Theme.of(context);
+  //   switch (controller.status) {
+  //     case PanelStatus.ready:
+  //       return Colors.green;
+  //     case PanelStatus.paused:
+  //     case PanelStatus.disabled:
+  //       return Colors.orange;
+  //     case PanelStatus.noBinding:
+  //       return theme.colorScheme.error;
+  //     case PanelStatus.disconnected:
+  //       return theme.disabledColor;
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    // final theme = Theme.of(context);
     final canScreenshot = controller.state?.canScreenshot ?? false;
     return AreaPaneHeader(
       roundedTopBorder: false,
       includeTopBorder: false,
       tall: true,
-      title: Row(
-        children: [
-          Container(
-            key: const Key('device_preview_status_dot'),
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _statusColor(context),
-            ),
-          ),
-          const SizedBox(width: denseSpacing),
-          Flexible(
-            child: Text(
-              controller.status == PanelStatus.ready
-                  ? controller.activeDeviceLabel
-                  : 'Device Preview',
-              style: theme.textTheme.titleSmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+      title: Container(
+        color: Colors.black,
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        width: double.maxFinite,
+        child: SvgPicture.asset(
+          'assets/wrteam_logo.svg',
+          fit: BoxFit.contain,
+        ),
       ),
+      // Row(
+      //   children: [
+      //     Container(
+      //       key: const Key('device_preview_status_dot'),
+      //       width: 10,
+      //       height: 10,
+      //       decoration: BoxDecoration(
+      //         shape: BoxShape.circle,
+      //         color: _statusColor(context),
+      //       ),
+      //     ),
+      //     const SizedBox(width: denseSpacing),
+      //     Flexible(
+      //       child: Text(
+      //         controller.status == PanelStatus.ready
+      //             ? controller.activeDeviceLabel
+      //             : 'Device Preview',
+      //         style: theme.textTheme.titleSmall,
+      //         overflow: TextOverflow.ellipsis,
+      //       ),
+      //     ),
+      //   ],
+      // ),
       actions: [
         if (controller.status == PanelStatus.ready) ...[
           DevToolsButton(
@@ -160,8 +170,8 @@ class _Toolbar extends StatelessWidget {
             CheckedPopupMenuItem<void>(
               key: const Key('device_preview_keep_across_restarts'),
               checked: controller.keepAcrossRestarts,
-              onTap: () =>
-                  controller.keepAcrossRestarts = !controller.keepAcrossRestarts,
+              onTap: () => controller.keepAcrossRestarts =
+                  !controller.keepAcrossRestarts,
               child: const Text('Keep across restarts'),
             ),
           ],
@@ -1039,9 +1049,8 @@ class _PlatformSection extends StatelessWidget {
         for (final platform in _targetPlatforms)
           DropdownMenuItem<String?>(value: platform, child: Text(platform)),
       ],
-      onChanged: capable
-          ? (value) => controller.setTargetPlatform(value)
-          : null,
+      onChanged:
+          capable ? (value) => controller.setTargetPlatform(value) : null,
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

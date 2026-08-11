@@ -17,6 +17,7 @@ dependencies:
   devtools_app_shared: ^0.5.1
   vm_service: ">=13.0.0 <16.0.0"
   web: ^1.1.0
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -25,3 +26,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/
