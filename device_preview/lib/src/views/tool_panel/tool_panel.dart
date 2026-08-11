@@ -88,13 +88,13 @@ class _ToolPanel extends StatelessWidget {
                 : theme.colorScheme.onPrimary),
           ),
         ),
-        // leading: isModal
-        //     ? IconButton(
-        //         icon: const Icon(Icons.close),
-        //         tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-        //         onPressed: onClose,
-        //       )
-        //     : null,
+        leading: isModal
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                onPressed: onClose,
+              )
+            : null,
         // actions: [
         //   if (!isModal)
         //     Switch(
