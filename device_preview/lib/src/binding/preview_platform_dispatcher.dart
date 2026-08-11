@@ -536,7 +536,4 @@ class PreviewPlatformDispatcher implements ui.PlatformDispatcher {
 
   @override
   String toString() => 'PreviewPlatformDispatcher(host: $host)';
-
-  @override
-  ui.HitTestCallback? onHitTest;
 }
