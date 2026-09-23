@@ -22,9 +22,9 @@ import '../model/simulation.dart';
 /// ```
 ///
 /// The bar shows [appName], an Android / iOS switch, a device menu listing
-/// the devices of the selected platform, and rotate and light / dark
-/// buttons. It deliberately has no switch to turn the preview off: the app
-/// always stays inside a device.
+/// the devices of the selected platform, and a light / dark button. It
+/// deliberately has no switch to turn the preview off, and no rotate button:
+/// the app always stays inside a device, in portrait.
 ///
 /// Room for the bar is reserved when the device is fitted into the window,
 /// so it never covers the app. It is only shown while a device is simulated;
@@ -40,7 +40,6 @@ class DevicePreviewToolbar {
     ],
     this.devices,
     this.initialDevice,
-    this.showRotate = true,
     this.showBrightness = true,
     this.backgroundColor = const Color(0xFF18181C),
     this.accentColor = const Color(0xFF8AB4F8),
@@ -63,9 +62,6 @@ class DevicePreviewToolbar {
   ///
   /// Ignored when a simulation is already active at startup.
   final DevicePreset? initialDevice;
-
-  /// Whether the bar has a button to rotate the device.
-  final bool showRotate;
 
   /// Whether the bar has a button to switch between light and dark.
   final bool showBrightness;
@@ -183,9 +179,8 @@ class _DevicePreviewToolbarViewState extends State<DevicePreviewToolbarView> {
 
   Future<void> _select(DevicePreset preset) async {
     _lastDevice[preset.platform] = preset;
-    final Orientation orientation =
-        _controller.simulation?.orientation ?? Orientation.portrait;
-    await _controller.applyPreset(preset, orientation: orientation);
+    // Always portrait: the bar offers no rotation.
+    await _controller.applyPreset(preset);
   }
 
   Future<void> _selectPlatform(TargetPlatform platform) async {
@@ -199,14 +194,6 @@ class _DevicePreviewToolbarViewState extends State<DevicePreviewToolbarView> {
     if (next != null) {
       await _select(next);
     }
-  }
-
-  Future<void> _rotate(DeviceSimulation simulation) {
-    return _controller.setOrientation(
-      simulation.orientation == Orientation.portrait
-          ? Orientation.landscape
-          : Orientation.portrait,
-    );
   }
 
   Future<void> _toggleBrightness(Brightness current) {
@@ -294,13 +281,6 @@ class _DevicePreviewToolbarViewState extends State<DevicePreviewToolbarView> {
       ),
     );
     final List<Widget> actions = <Widget>[
-      if (config.showRotate && simulation != null)
-        IconButton(
-          key: const Key('device_preview_toolbar_rotate'),
-          tooltip: 'Rotate',
-          icon: const Icon(Icons.screen_rotation_outlined),
-          onPressed: () => _rotate(simulation),
-        ),
       if (config.showBrightness)
         IconButton(
           key: const Key('device_preview_toolbar_brightness'),

@@ -6,8 +6,9 @@
 //   flutter build web -t lib/web_preview.dart
 //
 // The toolbar carries the app's name, an Android / iOS switch, a device menu,
-// and rotate and light / dark buttons. There is no switch to turn the
-// preview off, and dragging with the mouse scrolls like a finger.
+// and a light / dark button. There is no switch to turn the preview off
+// and no rotation (portrait only), and dragging with the mouse scrolls
+// like a finger.
 
 import 'package:device_preview/device_preview.dart';
 import 'package:device_preview/presets.dart';

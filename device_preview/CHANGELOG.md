@@ -4,8 +4,8 @@
 
 - `DevicePreview.enable(toolbar: DevicePreviewToolbar(...))`: an in-app
   toolbar for builds without DevTools (deployed web previews) — custom app
-  name, Android / iOS switch, device menu, rotate, light / dark. It has no
-  switch to turn the preview off.
+  name, Android / iOS switch, device menu, light / dark. It has no switch to
+  turn the preview off and no rotate button (portrait only).
 - Mouse drag scrolls like a finger on simulated phones, tablets and foldables
   (upstream 3.0 "Touch input", on by default).
 

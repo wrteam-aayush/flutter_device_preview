@@ -127,7 +127,9 @@ the app. It has:
   are never offered by default),
 - a **device menu** with the phones, tablets and foldables of the selected
   platform (`devices:` to choose your own list),
-- **rotate** and **light / dark** buttons (`showRotate`, `showBrightness`).
+- a **light / dark** button (`showBrightness`).
+
+There is no rotate button: devices always open in portrait.
 
 There is deliberately no switch to turn the preview off: the app always stays
 inside a device. Dragging with the mouse scrolls like a finger (see

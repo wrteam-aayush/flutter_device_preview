@@ -668,7 +668,7 @@ class DevicePreview extends BindingBase
   /// ```
   ///
   /// [toolbar] adds an in-app toolbar along the top of the window — the app
-  /// name, an Android / iOS switch, a device menu, rotate and light / dark —
+  /// name, an Android / iOS switch, a device menu and light / dark —
   /// for builds that DevTools cannot reach, such as a web preview of the app
   /// deployed for others to try. It starts on its first device (or
   /// [DevicePreviewToolbar.initialDevice]) and has no switch to turn the

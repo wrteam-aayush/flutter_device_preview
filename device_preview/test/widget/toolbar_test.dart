@@ -150,17 +150,14 @@ void main() {
     expect(controller.simulation?.presetId, DevicePresets.galaxyS25.id);
   });
 
-  testWidgets('rotate and brightness update the simulation', (
+  testWidgets('has no rotate button; brightness updates the simulation', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(app(() {}));
     await tester.pumpAndSettle();
 
-    await click(
-      tester,
-      onWindow(tester, find.byKey(const Key('device_preview_toolbar_rotate'))),
-    );
-    expect(controller.simulation?.orientation, Orientation.landscape);
+    expect(find.byIcon(Icons.screen_rotation_outlined), findsNothing);
+    expect(controller.simulation?.orientation, Orientation.portrait);
 
     final Brightness before =
         controller.simulation?.platformBrightness ??
