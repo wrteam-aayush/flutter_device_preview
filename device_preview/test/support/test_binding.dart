@@ -68,7 +68,8 @@ class TestDevicePreviewBinding extends AutomatedTestWidgetsFlutterBinding
 
   /// Mirrors what [DevicePreview] does, minus the dispatcher seam: the root
   /// widget goes under the wrapper view, wrapped in [DevicePreviewFrame] so
-  /// the simulated screen outline and device body render here too.
+  /// the simulated screen outline and device body render here too — and in
+  /// the in-app toolbar, when one is latched.
   @override
   Widget wrapWithDefaultView(Widget rootWidget) {
     final ui.FlutterView? wrapperView = previewImplicitView;
@@ -78,10 +79,12 @@ class TestDevicePreviewBinding extends AutomatedTestWidgetsFlutterBinding
         view: wrapperView,
         child: controller == null
             ? rootWidget
-            : DevicePreviewFrame(
-                simulation: controller.simulationListenable,
-                overlayStyle: systemOverlayStyle,
-                child: rootWidget,
+            : wrapWithPreviewToolbar(
+                DevicePreviewFrame(
+                  simulation: controller.simulationListenable,
+                  overlayStyle: systemOverlayStyle,
+                  child: rootWidget,
+                ),
               ),
       );
     }

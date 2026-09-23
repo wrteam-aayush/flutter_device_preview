@@ -103,6 +103,7 @@ class DevicePreviewControllerImpl implements DevicePreviewController {
     required this.hostView,
     required this.hostDispatcher,
     this.framePadding = EdgeInsets.zero,
+    this.chromeInsets,
     required VoidCallback handleMetricsChanged,
     required VoidCallback handleTextScaleFactorChanged,
     required VoidCallback handlePlatformBrightnessChanged,
@@ -135,6 +136,11 @@ class DevicePreviewControllerImpl implements DevicePreviewController {
   /// real logical pixels, on top of the host's own safe areas (which are
   /// always added — see [recomputeFit]).
   final EdgeInsets framePadding;
+
+  /// Extra room reserved for in-app chrome (the toolbar), as a function of
+  /// the real window's logical size, added to [framePadding]. Null when the
+  /// binding shows no chrome.
+  final EdgeInsets Function(ui.Size realLogicalSize)? chromeInsets;
 
   final VoidCallback _handleMetricsChanged;
   final VoidCallback _handleTextScaleFactorChanged;
@@ -207,13 +213,19 @@ class DevicePreviewControllerImpl implements DevicePreviewController {
       return;
     }
     final double ratio = hostView.devicePixelRatio;
+    final ui.Size realLogicalSize = hostView.physicalSize / ratio;
+    EdgeInsets realInsets =
+        framePadding + EdgeInsets.fromViewPadding(hostView.padding, ratio);
+    final EdgeInsets Function(ui.Size)? chrome = chromeInsets;
+    if (chrome != null) {
+      realInsets += chrome(realLogicalSize);
+    }
     state.fit = FitTransform.compute(
-      realLogicalSize: hostView.physicalSize / ratio,
+      realLogicalSize: realLogicalSize,
       simulatedLogicalSize: active.screenSize!,
       // Reserve room for the device body, which surrounds the screen.
       contentBounds: active.contentBounds,
-      realInsets:
-          framePadding + EdgeInsets.fromViewPadding(hostView.padding, ratio),
+      realInsets: realInsets,
     );
   }
 

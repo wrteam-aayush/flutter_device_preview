@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.0 — WRTeam fork (`release/v3`)
+
+- `DevicePreview.enable(toolbar: DevicePreviewToolbar(...))`: an in-app
+  toolbar for builds without DevTools (deployed web previews) — custom app
+  name, Android / iOS switch, device menu, rotate, light / dark. It has no
+  switch to turn the preview off.
+- Mouse drag scrolls like a finger on simulated phones, tablets and foldables
+  (upstream 3.0 "Touch input", on by default).
+
 ## 3.0.0
 
 The stable 3.0 release — a from-scratch rebuild of Device Preview. If you are

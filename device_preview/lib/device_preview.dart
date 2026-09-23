@@ -1,6 +1,7 @@
 /// Simulate the characteristics of another device — screen metrics, safe
 /// areas, locale, brightness, text scale, accessibility flags, target
-/// platform — at the engine-abstraction level, with no in-app UI.
+/// platform — at the engine-abstraction level, with an optional in-app
+/// toolbar ([DevicePreviewToolbar]).
 ///
 /// Device presets live in the separate, tree-shakable
 /// `package:device_preview/presets.dart` library, and the embedded SVG subset
@@ -17,6 +18,7 @@ export 'src/model/system_ui.dart';
 
 export 'src/binding/binding.dart' show DevicePreview, DevicePreviewBindingMixin;
 export 'src/controller/controller.dart' show DevicePreviewController;
+export 'src/toolbar/preview_toolbar.dart' show DevicePreviewToolbar;
 export 'src/widgets/device_preview_frame.dart'
     show DevicePreviewFrame, RenderDevicePreviewFrame;
 export 'src/widgets/dot_grid_decoration.dart';

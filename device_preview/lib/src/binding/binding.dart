@@ -8,15 +8,18 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../presets.dart' show DevicePreset;
 import '../controller/controller.dart';
 import '../model/pointer_rewrite.dart';
 import '../model/simulation.dart';
 import '../service/extensions.dart';
 import '../service/protocol.dart';
 import '../service/screenshot.dart';
+import '../toolbar/preview_toolbar.dart';
 import '../widgets/device_preview_frame.dart';
 import '../widgets/dot_grid_decoration.dart';
 import '../widgets/preview_background.dart';
+import '../widgets/preview_chrome.dart';
 import 'preview_flutter_view.dart';
 import 'preview_platform_dispatcher.dart';
 import 'preview_state.dart';
@@ -64,6 +67,7 @@ mixin DevicePreviewBindingMixin
   static EdgeInsets _latchedPadding = EdgeInsets.zero;
   static Decoration? _latchedBackgroundDecoration = const DotGridDecoration();
   static DeviceSimulation? _latchedInitialSimulation;
+  static DevicePreviewToolbar? _latchedToolbar;
 
   static const Object _unsetInitialSimulation = Object();
 
@@ -75,6 +79,9 @@ mixin DevicePreviewBindingMixin
   /// the simulated device and the decoration painted there — see
   /// [DevicePreview.enable], which forwards them here.
   ///
+  /// [toolbar] configures the in-app toolbar, or null (the default) for
+  /// none — see [DevicePreview.enable].
+  ///
   /// [initialSimulation] is applied before the first frame, which is how
   /// golden and CI scenarios start under a given device without DevTools.
   /// Sentinel-based: omitting it keeps any previously latched simulation —
@@ -85,11 +92,13 @@ mixin DevicePreviewBindingMixin
     bool enabled = !kReleaseMode,
     EdgeInsets padding = EdgeInsets.zero,
     Decoration? backgroundDecoration = const DotGridDecoration(),
+    DevicePreviewToolbar? toolbar,
     Object? initialSimulation = _unsetInitialSimulation,
   }) {
     _latchedEnabled = enabled;
     _latchedPadding = padding;
     _latchedBackgroundDecoration = backgroundDecoration;
+    _latchedToolbar = toolbar;
     if (!identical(initialSimulation, _unsetInitialSimulation)) {
       _latchedInitialSimulation = initialSimulation as DeviceSimulation?;
     }
@@ -109,6 +118,12 @@ mixin DevicePreviewBindingMixin
   /// leave the letterbox unpainted. Latched before init and fixed for the
   /// binding's lifetime.
   late final Decoration? backgroundDecoration = _latchedBackgroundDecoration;
+
+  /// The in-app toolbar shown above the simulated device, or null for none.
+  /// Latched before init and fixed for the binding's lifetime.
+  late final DevicePreviewToolbar? toolbar = _latchedToolbar;
+
+  final GlobalKey _chromeKey = GlobalKey(debugLabel: 'device_preview chrome');
 
   final PreviewState _state = PreviewState();
   PreviewPlatformDispatcher? _previewDispatcher;
@@ -184,6 +199,10 @@ mixin DevicePreviewBindingMixin
       hostView: hostView,
       hostDispatcher: dispatcher.host,
       framePadding: framePadding,
+      chromeInsets: toolbar == null
+          ? null
+          : (ui.Size real) =>
+                EdgeInsets.only(top: DevicePreviewToolbar.heightFor(real)),
       handleMetricsChanged: handleMetricsChanged,
       handleTextScaleFactorChanged: handleTextScaleFactorChanged,
       handlePlatformBrightnessChanged: handlePlatformBrightnessChanged,
@@ -197,6 +216,15 @@ mixin DevicePreviewBindingMixin
     if (initial != null) {
       // Applied before the first frame; only targetPlatform work is async.
       unawaited(_controller!.applyTagged(initial));
+    } else if (toolbar != null) {
+      // The toolbar lives in the letterbox, which only exists around a
+      // simulated device: start on one rather than on the real window.
+      final DevicePreset? device = toolbar!.resolveInitialDevice(
+        _controller!.presets,
+      );
+      if (device != null) {
+        unawaited(_controller!.applyPreset(device));
+      }
     }
   }
 
@@ -265,7 +293,55 @@ mixin DevicePreviewBindingMixin
         child: wrapped,
       );
     }
-    return super.wrapWithDefaultView(wrapped);
+    return super.wrapWithDefaultView(wrapWithPreviewToolbar(wrapped));
+  }
+
+  /// Wraps [app] with the configured [toolbar], or returns it unchanged when
+  /// there is none (or simulation is off).
+  ///
+  /// [wrapWithDefaultView] calls this; compositions that override it (test
+  /// bindings) call it themselves to get the toolbar.
+  @protected
+  Widget wrapWithPreviewToolbar(Widget app) {
+    final DevicePreviewToolbar? config = toolbar;
+    final DevicePreviewControllerImpl? controller = _controller;
+    if (!simulationEnabled || config == null || controller == null) {
+      return app;
+    }
+    return PreviewChrome(
+      key: _chromeKey,
+      simulation: controller.simulationListenable,
+      fit: _state.fitNotifier,
+      hostView: controller.hostView,
+      app: app,
+      toolbar: DevicePreviewToolbarView(
+        config: config,
+        controller: controller,
+        hostView: controller.hostView,
+      ),
+    );
+  }
+
+  /// Hit tests the toolbar before the app.
+  ///
+  /// The toolbar is painted in the letterbox, outside the simulated screen,
+  /// where the app's render boxes reject every position. When it is hit, the
+  /// app is not hit tested at all: the toolbar is on top.
+  @override
+  void hitTestInView(HitTestResult result, Offset position, int viewId) {
+    final RenderObject? chrome = _chromeKey.currentContext?.findRenderObject();
+    if (chrome is RenderPreviewChrome &&
+        chrome.attached &&
+        viewId == _previewDispatcher?.previewImplicitView?.viewId &&
+        // The chrome is the root box of the view, at its origin: the view's
+        // logical position is the chrome's local one.
+        chrome.hitTestToolbar(BoxHitTestResult.wrap(result), position)) {
+      // What GestureBinding.hitTestInView adds, so the pointer router (and
+      // the gesture arena) sees the event.
+      result.add(HitTestEntry(this));
+      return;
+    }
+    super.hitTestInView(result, position, viewId);
   }
 
   /// Picks up the style the frame just resolved.
@@ -591,6 +667,20 @@ class DevicePreview extends BindingBase
   /// );
   /// ```
   ///
+  /// [toolbar] adds an in-app toolbar along the top of the window — the app
+  /// name, an Android / iOS switch, a device menu, rotate and light / dark —
+  /// for builds that DevTools cannot reach, such as a web preview of the app
+  /// deployed for others to try. It starts on its first device (or
+  /// [DevicePreviewToolbar.initialDevice]) and has no switch to turn the
+  /// preview off.
+  ///
+  /// ```dart
+  /// DevicePreview.enable(
+  ///   enabled: true, // also in the release web build
+  ///   toolbar: const DevicePreviewToolbar(appName: 'My App'),
+  /// );
+  /// ```
+  ///
   /// The resolved values are latched forever at the first call; later calls
   /// return the existing binding unchanged.
   ///
@@ -602,12 +692,14 @@ class DevicePreview extends BindingBase
     bool? enabled,
     EdgeInsets padding = EdgeInsets.zero,
     Decoration? backgroundDecoration = const DotGridDecoration(),
+    DevicePreviewToolbar? toolbar,
   }) {
     if (_instance == null) {
       DevicePreviewBindingMixin.latchConfiguration(
         enabled: enabled ?? !kReleaseMode,
         padding: padding,
         backgroundDecoration: backgroundDecoration,
+        toolbar: toolbar,
       );
       DevicePreview();
     }

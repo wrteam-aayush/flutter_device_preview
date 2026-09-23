@@ -103,6 +103,36 @@ Naming a preset is what compiles it in; the whole catalog (≈300 KB of `const`
 data, artwork included) is only pulled in if you reach for `DevicePresets.all`
 or `DevicePresets.byId`, which walk every entry.
 
+## In-app toolbar (web previews)
+
+DevTools drives the simulation while you develop, but a deployed build — a
+web preview of your app shared with clients, say — has no DevTools. Give it
+an in-app toolbar instead:
+
+```dart
+DevicePreview.enable(
+  enabled: true, // a deployed web build is a release build
+  toolbar: const DevicePreviewToolbar(
+    appName: 'My App',                        // shown on the left of the bar
+    initialDevice: DevicePresets.iPhone16Pro, // optional
+  ),
+);
+```
+
+The bar sits along the top of the window, above the device, and never covers
+the app. It has:
+
+- the **app name** (`Device Preview` when `appName` is null),
+- an **Android / iOS** switch (`platforms:` to change it — desktop platforms
+  are never offered by default),
+- a **device menu** with the phones, tablets and foldables of the selected
+  platform (`devices:` to choose your own list),
+- **rotate** and **light / dark** buttons (`showRotate`, `showBrightness`).
+
+There is deliberately no switch to turn the preview off: the app always stays
+inside a device. Dragging with the mouse scrolls like a finger (see
+[Touch input](#touch-input)).
+
 ## Testing under a simulated device
 
 Widget tests can run under a simulated device too, so you can assert that a
