@@ -40,6 +40,7 @@ const List<String> kMetricSimulationKeys = <String>[
   'padding',
   'viewPadding',
   'systemGestureInsets',
+  'keyboardInset',
   'displayFeatures',
 ];
 
@@ -53,6 +54,20 @@ const List<String> kAccessibilityFlags = <String>[
   'highContrast',
   'onOffSwitchLabels',
 ];
+
+/// The `TargetPlatform` names the app-side protocol accepts.
+///
+/// Guards the `systemUi.platform` stamp: a user-imported device may declare
+/// any string, and pushing an unknown name would make the app reject the
+/// whole simulation.
+const Set<String> kTargetPlatforms = <String>{
+  'android',
+  'fuchsia',
+  'iOS',
+  'linux',
+  'macOS',
+  'windows',
+};
 
 /// Raw-JSON-backed view over one device: an entry of the generated
 /// [kDeviceSpecs] catalog, or of `ext.device_preview.listPresets` for presets
@@ -81,6 +96,20 @@ class PresetView {
   /// (desktop windows, app-registered presets).
   int? get year => (json['year'] as num?)?.toInt();
 
+  /// The height this device's software keyboard covers in portrait, or null
+  /// when it has none (a desktop window) or none was measured.
+  double? get portraitKeyboardHeight =>
+      (json['portraitKeyboardHeight'] as num?)?.toDouble();
+
+  /// The height this device's software keyboard covers in landscape.
+  double? get landscapeKeyboardHeight =>
+      (json['landscapeKeyboardHeight'] as num?)?.toDouble();
+
+  /// The keyboard height for the given orientation, or null when this device
+  /// declares none for it.
+  double? keyboardHeight({required bool landscape}) =>
+      landscape ? landscapeKeyboardHeight : portraitKeyboardHeight;
+
   /// Screen outline and body artwork, when the device has a frame.
   Map<String, Object?>? get frame => _asMap(json['frame']);
 
@@ -97,7 +126,8 @@ class PresetView {
   Map<String, Object?>? get portraitSize => _asMap(json['portraitSize']);
 
   /// Device pixel ratio.
-  double? get devicePixelRatio => (json['devicePixelRatio'] as num?)?.toDouble();
+  double? get devicePixelRatio =>
+      (json['devicePixelRatio'] as num?)?.toDouble();
 
   /// Portrait `MediaQuery.padding` as an insets map.
   Map<String, Object?>? get portraitPadding => _asMap(json['portraitPadding']);
@@ -119,7 +149,8 @@ class PresetView {
       _asMap(json['systemGestureInsets']);
 
   /// Display features (foldables), when provided.
-  List<Object?>? get displayFeatures => json['displayFeatures'] as List<Object?>?;
+  List<Object?>? get displayFeatures =>
+      json['displayFeatures'] as List<Object?>?;
 }
 
 /// Raw-JSON-backed view over the protocol state shape (§4 of the design).
@@ -157,6 +188,9 @@ class StateView {
 
   /// Whether target-platform simulation is available (debug builds only).
   bool get canTargetPlatform => capabilities['targetPlatform'] == true;
+
+  /// Whether the app can raise a simulated software keyboard (protocol 4).
+  bool get canKeyboard => capabilities['keyboard'] == true;
 }
 
 Map<String, Object?>? _asMap(Object? value) =>
@@ -204,6 +238,7 @@ class PanelController extends ChangeNotifier {
   })  : _storage = storage ?? createPlatformStorage(),
         _saveScreenshot = saveScreenshot ?? savePngDownload {
     _keepAcrossRestarts = _storage.read(_keepStorageKey) == 'true';
+    _userDevices = _readStoredUserDevices();
     gateway.connected.addListener(_onConnectionChanged);
     gateway.extensionAvailable.addListener(_onAvailabilityChanged);
     _eventsSubscription = gateway.events.listen(_onEvent);
@@ -239,11 +274,18 @@ class PanelController extends ChangeNotifier {
   /// Presets the inspected app registered itself, minus the ones the built-in
   /// catalog already describes (the catalog entry wins: it has artwork).
   List<PresetView> _customPresets = const <PresetView>[];
+
+  /// Devices the user imported from JSON specs in this panel. Persisted in
+  /// [_storage] (not keyed per inspected app: a device is a device).
+  List<PresetView> _userDevices = const <PresetView>[];
   Map<String, Object?>? _stashedSimulation;
   bool _keepAcrossRestarts = false;
   bool _disposed = false;
 
   static const String _keepStorageKey = 'device_preview.keepAcrossRestarts';
+
+  /// Storage key of the JSON array of user-imported device specs.
+  static const String userDevicesStorageKey = 'device_preview.userDevices';
 
   /// `ServiceExtensionResponse.invalidParams`: the app-side glue rejected the
   /// request payload. The only RPC error that proves the isolate is running.
@@ -268,14 +310,26 @@ class PanelController extends ChangeNotifier {
   /// The active simulation JSON, or null when passing through.
   Map<String, Object?>? get simulation => state?.simulation;
 
-  /// The devices offered by the picker: the built-in catalog, followed by any
-  /// preset the inspected app registered through
-  /// `DevicePreviewController.registerPreset` that the catalog does not
-  /// already cover.
-  List<PresetView> get presets => <PresetView>[
-        ...kBuiltInPresets,
-        ..._customPresets,
-      ];
+  /// The devices offered by the picker: the user's imported devices, the
+  /// built-in catalog (minus any entry a user device overrides by id),
+  /// followed by any preset the inspected app registered through
+  /// `DevicePreviewController.registerPreset` that neither already covers.
+  List<PresetView> get presets {
+    final userIds = _userDevices.map((p) => p.id).toSet();
+    return <PresetView>[
+      ..._userDevices,
+      ...kBuiltInPresets.where((p) => !userIds.contains(p.id)),
+      ..._customPresets.where((p) => !userIds.contains(p.id)),
+    ];
+  }
+
+  /// Devices imported from JSON specs through [importUserDevices], in import
+  /// order. Persisted across sessions.
+  List<PresetView> get userDevices =>
+      List<PresetView>.unmodifiable(_userDevices);
+
+  /// Whether [id] is one of the [userDevices].
+  bool isUserDevice(String id) => _userDevices.any((p) => p.id == id);
 
   /// Whether the "Keep across restarts" toggle is on.
   bool get keepAcrossRestarts => _keepAcrossRestarts;
@@ -288,6 +342,21 @@ class PanelController extends ChangeNotifier {
 
   /// Whether that system UI is currently shown (the default).
   bool get showSystemUi => simulation?['showSystemUi'] != false;
+
+  /// The height a simulated keyboard currently covers, or null when none is
+  /// raised.
+  double? get keyboardInset =>
+      (simulation?['keyboardInset'] as num?)?.toDouble();
+
+  /// Whether the selected device declares a keyboard for its current
+  /// orientation — the panel's keyboard switch is inert without one.
+  bool get hasKeyboard =>
+      (state?.canKeyboard ?? false) &&
+      hasSimulatedScreen &&
+      activePreset?.keyboardHeight(
+            landscape: simulation?['orientation'] == 'landscape',
+          ) !=
+          null;
 
   /// Whether the host's pointers are reported to the app as touches, or null
   /// — "auto" — to let the selected device decide (touch on a phone, tablet
@@ -352,8 +421,7 @@ class PanelController extends ChangeNotifier {
         gateway.showBannerMessage(
           key: 'device_preview_no_binding',
           type: 'warning',
-          message:
-              'Device Preview is not active in this app. Add '
+          message: 'Device Preview is not active in this app. Add '
               '`DevicePreview.enable()` before `runApp`.',
         );
       });
@@ -442,6 +510,10 @@ class PanelController extends ChangeNotifier {
                 !builtInIds.contains(entry['id'] as String? ?? ''))
               PresetView(Map<String, Object?>.from(entry)),
       ];
+      // A device the user imported here and the app also registered (e.g.
+      // through `applyJson`) is the same device: list it once, under the
+      // user's copy.
+      _customPresets.removeWhere((p) => isUserDevice(p.id));
     } on GatewayException {
       _customPresets = const <PresetView>[];
     }
@@ -463,6 +535,49 @@ class PanelController extends ChangeNotifier {
       final orientation = current['orientation'] as String? ?? 'portrait';
       return _applyPresetSimulation(preset, orientation, current);
     });
+  }
+
+  /// Imports one device spec — or a JSON array of specs — from [jsonText],
+  /// in the `DevicePreset.toJson()` / `device_specs/*.json` format, adds them
+  /// to [userDevices] (replacing any user device with the same id) and
+  /// persists the list for later sessions.
+  ///
+  /// Returns the imported devices. Throws a [FormatException] describing the
+  /// first problem found when the text is not valid JSON or a spec lacks a
+  /// required field; nothing is imported in that case.
+  List<PresetView> importUserDevices(String jsonText) {
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(jsonText);
+    } on FormatException catch (error) {
+      throw FormatException('Invalid JSON: ${error.message}');
+    }
+    final rawSpecs = decoded is List ? decoded : <Object?>[decoded];
+    if (rawSpecs.isEmpty) {
+      throw const FormatException('The JSON array contains no device spec.');
+    }
+    final imported = <PresetView>[
+      for (final raw in rawSpecs) _validateUserDeviceSpec(raw),
+    ];
+    final next = List<PresetView>.of(_userDevices);
+    for (final preset in imported) {
+      next.removeWhere((p) => p.id == preset.id);
+      next.add(preset);
+    }
+    _userDevices = next;
+    _storeUserDevices();
+    notifyListeners();
+    return imported;
+  }
+
+  /// Removes the user device [id] (no-op for catalog or app presets).
+  void removeUserDevice(String id) {
+    final next = List<PresetView>.of(_userDevices)
+      ..removeWhere((p) => p.id == id);
+    if (next.length == _userDevices.length) return;
+    _userDevices = next;
+    _storeUserDevices();
+    notifyListeners();
   }
 
   /// Clears all metric fields ("Real device"), preserving non-metric
@@ -530,9 +645,8 @@ class PanelController extends ChangeNotifier {
       // rotation (before the size swap, using the pre-rotation extents).
       final features = sim['displayFeatures'];
       if (features is List && size != null) {
-        final extent =
-            ((toLandscape ? size['width'] : size['height']) as num?)
-                ?.toDouble();
+        final extent = ((toLandscape ? size['width'] : size['height']) as num?)
+            ?.toDouble();
         if (extent != null) {
           sim['displayFeatures'] = _rotateDisplayFeatures(
             features,
@@ -567,6 +681,28 @@ class PanelController extends ChangeNotifier {
   /// the brightness or text scale overrides do.
   Future<void> setShowSystemUi(bool value) =>
       _mutate('showSystemUi', value ? null : false);
+
+  /// Raises or drops the selected device's software keyboard.
+  ///
+  /// The height comes from the device itself, for the orientation it is in;
+  /// a device that declares none cannot raise one, so this is a no-op there.
+  /// Like the app-side controller, a raised keyboard survives switching
+  /// device — with the new device's height (see [_applyPresetSimulation]).
+  Future<void> setKeyboardVisible(bool value) {
+    return _enqueueWrite(() {
+      final sim = _currentSimulation();
+      if (!value) {
+        sim.remove('keyboardInset');
+        return _pushSimulation(sim.isEmpty ? null : sim);
+      }
+      final height = activePreset?.keyboardHeight(
+        landscape: sim['orientation'] == 'landscape',
+      );
+      if (height == null) return Future<void>.value();
+      sim['keyboardInset'] = height;
+      return _pushSimulation(sim);
+    });
+  }
 
   /// Makes the host's mouse act as a finger (`true`), restores it (`false`),
   /// or hands the choice to the selected device (`null`, the default).
@@ -604,8 +740,7 @@ class PanelController extends ChangeNotifier {
   Future<void> setAccessibilityFlag(String flag, bool? value) {
     return _enqueueWrite(() {
       final sim = _currentSimulation();
-      final accessibility =
-          _asMap(sim['accessibility']) ?? <String, Object?>{};
+      final accessibility = _asMap(sim['accessibility']) ?? <String, Object?>{};
       if (value == null) {
         accessibility.remove(flag);
       } else {
@@ -699,6 +834,10 @@ class PanelController extends ChangeNotifier {
     Map<String, Object?> current,
   ) {
     final sim = Map<String, Object?>.from(current);
+    // A raised keyboard survives the switch, but its height is the new
+    // device's, for the orientation it lands in — the same rule the app-side
+    // controller applies to `applyPreset`.
+    final keyboardWasRaised = current['keyboardInset'] != null;
     for (final key in kMetricSimulationKeys) {
       sim.remove(key);
     }
@@ -710,9 +849,18 @@ class PanelController extends ChangeNotifier {
     final frame = preset.frame;
     if (frame != null) sim['frame'] = frame;
     // Like the frame, the bars are orientation-independent: they follow the
-    // safe areas, which are resolved below.
+    // safe areas, which are resolved below. They carry the preset's platform
+    // so the app paints them with the simulated device's semantics (Android
+    // tints the bar backgrounds, iOS never does) instead of its own host's.
     final systemUi = preset.systemUi;
-    if (systemUi != null) sim['systemUi'] = systemUi;
+    if (systemUi != null) {
+      sim['systemUi'] = <String, Object?>{
+        ...systemUi,
+        if (systemUi['platform'] == null &&
+            kTargetPlatforms.contains(preset.platform))
+          'platform': preset.platform,
+      };
+    }
     final landscape = orientation == 'landscape';
     final size = preset.portraitSize;
     if (size != null) {
@@ -747,6 +895,10 @@ class PanelController extends ChangeNotifier {
     if (gestureInsets != null &&
         gestureInsets.values.any((v) => v != 0 && v != 0.0)) {
       sim['systemGestureInsets'] = gestureInsets;
+    }
+    if (keyboardWasRaised) {
+      final keyboard = preset.keyboardHeight(landscape: landscape);
+      if (keyboard != null) sim['keyboardInset'] = keyboard;
     }
     final displayFeatures = preset.displayFeatures;
     if (displayFeatures != null && displayFeatures.isNotEmpty) {
@@ -935,6 +1087,71 @@ class PanelController extends ChangeNotifier {
       _storage.remove(_stashStorageKey);
     } else {
       _storage.write(_stashStorageKey, jsonEncode(sim));
+    }
+  }
+
+  /// Checks the fields the panel and the app both need to turn [raw] into a
+  /// simulation; mirrors the required keys of `DevicePreset.fromJson`.
+  static PresetView _validateUserDeviceSpec(Object? raw) {
+    if (raw is! Map) {
+      throw FormatException(
+        'A device spec must be a JSON object, got ${raw.runtimeType}.',
+      );
+    }
+    final json = _deepCopy(Map<String, Object?>.from(raw));
+    String requireString(String key) {
+      final value = json[key];
+      if (value is! String || value.trim().isEmpty) {
+        throw FormatException('"$key" must be a non-empty string.');
+      }
+      return value;
+    }
+
+    double requirePositive(Object? value, String label) {
+      if (value is! num || !value.isFinite || value <= 0) {
+        throw FormatException('"$label" must be a positive number.');
+      }
+      return value.toDouble();
+    }
+
+    requireString('id');
+    requireString('name');
+    requireString('platform');
+    final size = json['portraitSize'];
+    if (size is! Map) {
+      throw const FormatException(
+        '"portraitSize" must be an object with "width" and "height".',
+      );
+    }
+    requirePositive(size['width'], 'portraitSize.width');
+    requirePositive(size['height'], 'portraitSize.height');
+    requirePositive(json['devicePixelRatio'], 'devicePixelRatio');
+    return PresetView(json);
+  }
+
+  void _storeUserDevices() {
+    if (_userDevices.isEmpty) {
+      _storage.remove(userDevicesStorageKey);
+    } else {
+      _storage.write(
+        userDevicesStorageKey,
+        jsonEncode(_userDevices.map((p) => p.json).toList()),
+      );
+    }
+  }
+
+  List<PresetView> _readStoredUserDevices() {
+    final raw = _storage.read(userDevicesStorageKey);
+    if (raw == null) return const <PresetView>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const <PresetView>[];
+      return <PresetView>[
+        for (final entry in decoded)
+          if (entry is Map) PresetView(Map<String, Object?>.from(entry)),
+      ];
+    } on FormatException {
+      return const <PresetView>[];
     }
   }
 

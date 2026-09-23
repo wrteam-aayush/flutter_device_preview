@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:device_preview_devtools_extension/src/panel.dart';
 import 'package:device_preview_devtools_extension/src/panel_controller.dart';
 import 'package:device_preview_devtools_extension/src/platform/platform_io.dart';
@@ -111,8 +113,8 @@ void main() {
           .tap(find.byKey(const Key('device_preview_preset_picker_button')));
       await tester.pumpAndSettle();
 
-      // 2026 matches exactly one catalog device, and its subtitle carries the
-      // year between the brand and the metrics.
+      // The 2026 subtitle carries the year between the brand and the
+      // metrics.
       await tester.enterText(
         find.byKey(const Key('device_preview_preset_search')),
         '2026',
@@ -142,7 +144,7 @@ void main() {
       // tail of the list is below the fold and not built).
       expect(
         names.take(4),
-        ['iPhone 17e', 'iPhone 16e', 'iPhone 17', 'iPhone 17 Pro'],
+        ['iPhone 17e', 'iPhone 17', 'iPhone 17 Pro', 'iPhone 17 Pro Max'],
       );
     });
 
@@ -176,9 +178,33 @@ void main() {
       );
       expect(enabled.onChanged, isNotNull);
 
-      await tester.tap(find.byKey(const Key('device_preview_system_ui_switch')));
+      await tester
+          .tap(find.byKey(const Key('device_preview_system_ui_switch')));
       await tester.pumpAndSettle();
       expect(gateway.simulation?['showSystemUi'], isFalse);
+    });
+
+    testWidgets('keyboard switch raises the device keyboard', (tester) async {
+      await pumpPanel(tester);
+      final key = const Key('device_preview_keyboard_switch');
+      // Nothing selected: no device to take a keyboard height from.
+      expect(tester.widget<Switch>(find.byKey(key)).onChanged, isNull);
+      expect(tester.widget<Switch>(find.byKey(key)).value, isFalse);
+
+      // testPhonePresetJson is in the app's preset list (see setUp), so the
+      // panel can resolve its keyboard height.
+      await controller.selectPreset(const PresetView(testPhonePresetJson));
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(find.byKey(key)).onChanged, isNotNull);
+
+      await tester.tap(find.byKey(key));
+      await tester.pumpAndSettle();
+      expect(gateway.simulation?['keyboardInset'], 250.0);
+      expect(tester.widget<Switch>(find.byKey(key)).value, isTrue);
+
+      await tester.tap(find.byKey(key));
+      await tester.pumpAndSettle();
+      expect(gateway.simulation, isNot(contains('keyboardInset')));
     });
 
     testWidgets('touch input tri-state sends auto/on/off', (tester) async {
@@ -198,7 +224,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(gateway.simulation?['touchInput'], isFalse);
 
-      await tester.tap(find.descendant(of: toggle, matching: find.text('Auto')));
+      await tester
+          .tap(find.descendant(of: toggle, matching: find.text('Auto')));
       await tester.pumpAndSettle();
       expect(gateway.simulation, isNull, reason: 'nothing left to override');
     });
@@ -222,6 +249,64 @@ void main() {
         gateway.simulation?['screenSize'],
         {'width': 800.0, 'height': 400.0},
       );
+    });
+
+    testWidgets(
+        'importing a device from JSON saves it, selects it and lists '
+        'it under My devices', (tester) async {
+      await pumpPanel(tester);
+      await tester
+          .tap(find.byKey(const Key('device_preview_preset_picker_button')));
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(const Key('device_preview_import_json_entry')));
+      await tester.pumpAndSettle();
+      expect(find.text('New device from JSON'), findsOneWidget);
+
+      // Garbage is refused inline, the dialog stays open.
+      await tester.enterText(
+        find.byKey(const Key('device_preview_import_json_field')),
+        '{"id": "x"}',
+      );
+      await tester
+          .tap(find.byKey(const Key('device_preview_import_json_apply')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('"name" must be'), findsOneWidget);
+      expect(gateway.simulation, isNull);
+
+      // A real spec (frame + system UI) imports and is applied right away.
+      await tester.enterText(
+        find.byKey(const Key('device_preview_import_json_field')),
+        jsonEncode(testFramedPresetJson),
+      );
+      await tester
+          .tap(find.byKey(const Key('device_preview_import_json_apply')));
+      await tester.pumpAndSettle();
+      expect(find.text('New device from JSON'), findsNothing);
+      expect(gateway.simulation?['presetId'], 'test-framed');
+      expect(gateway.simulation?['frame'], testFramedPresetJson['frame']);
+      expect(gateway.simulation?['systemUi'], <String, Object?>{
+        ...testFramedPresetJson['systemUi'] as Map<String, Object?>,
+        'platform': testFramedPresetJson['platform'],
+      });
+      expect(controller.activeDeviceLabel, 'Test Framed Phone');
+      expect(controller.userDevices.map((p) => p.id), ['test-framed']);
+
+      // The picker now lists it under "My devices", with a remove button.
+      await tester
+          .tap(find.byKey(const Key('device_preview_preset_picker_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('My devices'), findsOneWidget);
+      final tile =
+          find.byKey(const Key('device_preview_user_device_test-framed'));
+      expect(tile, findsOneWidget);
+      expect(tester.widget<ListTile>(tile).selected, isTrue);
+      await tester.tap(
+        find.byKey(const Key('device_preview_user_device_remove_test-framed')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('My devices'), findsNothing);
+      expect(controller.userDevices, isEmpty);
     });
 
     testWidgets('custom expander applies custom metrics', (tester) async {

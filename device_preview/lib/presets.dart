@@ -18,6 +18,8 @@ import 'src/model/system_ui.dart';
 export 'src/model/device_kind.dart';
 export 'src/model/simulation.dart' show SimulatedDisplayFeature;
 
+part 'src/presets.g.dart';
+
 /// Description of a device: its metrics, and optionally the [frame] it is
 /// drawn in.
 ///
@@ -25,12 +27,12 @@ export 'src/model/simulation.dart' show SimulatedDisplayFeature;
 /// values are either provided explicitly or derived by the documented
 /// rotation rule (see [rotateToLandscape]).
 ///
-/// The built-in [DevicePresets] are metrics-only — no artwork ships in the
-/// package. Frames come from the device spec catalog of the DevTools
-/// extension (`device_specs/` at the root of the repository), which pushes
-/// them over the simulation protocol; [fromJson] decodes exactly that
-/// catalog format, so a spec file can also be loaded directly by an app that
-/// wants a framed golden test.
+/// The built-in [DevicePresets] carry the complete spec — [frame] artwork
+/// and [systemUi] included. They are generated from the device spec catalog
+/// shared with the DevTools extension (`device_specs/` at the root of the
+/// repository); [fromJson] decodes exactly that catalog format, so a spec
+/// file can also be loaded directly by an app that wants a framed golden
+/// test.
 @immutable
 class DevicePreset {
   /// Creates a device preset.
@@ -49,6 +51,8 @@ class DevicePreset {
     this.landscapePadding,
     this.landscapeViewPadding,
     this.systemGestureInsets = EdgeInsets.zero,
+    this.portraitKeyboardHeight,
+    this.landscapeKeyboardHeight,
     this.displayFeatures = const <SimulatedDisplayFeature>[],
     this.kind = DeviceKind.phone,
   });
@@ -58,6 +62,25 @@ class DevicePreset {
   /// Unknown keys are ignored; missing required keys or malformed values
   /// throw a [FormatException].
   factory DevicePreset.fromJson(Map<String, Object?> json) {
+    final TargetPlatform platform = decodeEnum(
+      json['platform'],
+      TargetPlatform.values,
+      'platform',
+    );
+    // Bars that do not name their platform get the device's: paint-time
+    // behavior (Android tints bar backgrounds, iOS never does) must follow
+    // the simulated device, not the app's host. Specs in `device_specs/`
+    // rely on this — they never repeat the platform inside `systemUi`.
+    SystemUiSimulation? systemUi = json['systemUi'] == null
+        ? null
+        : SystemUiSimulation.fromJson(decodeMap(json['systemUi'], 'systemUi'));
+    if (systemUi != null && systemUi.platform == null) {
+      systemUi = SystemUiSimulation(
+        statusBar: systemUi.statusBar,
+        navigationBar: systemUi.navigationBar,
+        platform: platform,
+      );
+    }
     return DevicePreset(
       id: decodeString(json['id'], 'id'),
       name: decodeString(json['name'], 'name'),
@@ -65,13 +88,11 @@ class DevicePreset {
           ? null
           : decodeString(json['brand'], 'brand'),
       year: json['year'] == null ? null : decodeInt(json['year'], 'year'),
-      platform: decodeEnum(json['platform'], TargetPlatform.values, 'platform'),
+      platform: platform,
       frame: json['frame'] == null
           ? null
           : DeviceFrame.fromJson(decodeMap(json['frame'], 'frame')),
-      systemUi: json['systemUi'] == null
-          ? null
-          : SystemUiSimulation.fromJson(decodeMap(json['systemUi'], 'systemUi')),
+      systemUi: systemUi,
       portraitSize: decodeSize(json['portraitSize'], 'portraitSize'),
       devicePixelRatio: decodeDouble(
         json['devicePixelRatio'],
@@ -100,6 +121,18 @@ class DevicePreset {
           : decodeEdgeInsets(
               json['systemGestureInsets'],
               'systemGestureInsets',
+            ),
+      portraitKeyboardHeight: json['portraitKeyboardHeight'] == null
+          ? null
+          : decodeDouble(
+              json['portraitKeyboardHeight'],
+              'portraitKeyboardHeight',
+            ),
+      landscapeKeyboardHeight: json['landscapeKeyboardHeight'] == null
+          ? null
+          : decodeDouble(
+              json['landscapeKeyboardHeight'],
+              'landscapeKeyboardHeight',
             ),
       displayFeatures: json['displayFeatures'] == null
           ? const <SimulatedDisplayFeature>[]
@@ -169,6 +202,25 @@ class DevicePreset {
   /// The system gesture insets, in logical pixels.
   final EdgeInsets systemGestureInsets;
 
+  /// The height the device's software keyboard covers in portrait, in
+  /// logical pixels, or null when the device has no software keyboard (a
+  /// desktop window) or its height has not been measured.
+  ///
+  /// Measured on the device itself, with its stock keyboard and no
+  /// predictive-text row toggled off. Showing it is a per-simulation choice
+  /// ([DeviceSimulation.keyboardInset]), so a preset never turns it on by
+  /// itself: [resolve] leaves the keyboard hidden.
+  final double? portraitKeyboardHeight;
+
+  /// The height the device's software keyboard covers in landscape, in
+  /// logical pixels. See [portraitKeyboardHeight].
+  ///
+  /// Keyboards are shorter in landscape and the ratio is not derivable from
+  /// the portrait height, so there is no rotation rule: a device that
+  /// declares one height and not the other simply has no keyboard in the
+  /// other orientation.
+  final double? landscapeKeyboardHeight;
+
   /// Display features (folds, hinges, cutouts), in portrait logical pixels.
   final List<SimulatedDisplayFeature> displayFeatures;
 
@@ -191,6 +243,22 @@ class DevicePreset {
     bottom: portrait.bottom,
   );
 
+  /// The keyboard height for [orientation], or null when this device
+  /// declares none.
+  ///
+  /// The value to pass to `DeviceSimulation.copyWith(keyboardInset: …)` to
+  /// raise this device's keyboard:
+  ///
+  /// ```dart
+  /// await c.update(
+  ///   (s) => s.copyWith(keyboardInset: preset.keyboardHeight(s.orientation)),
+  /// );
+  /// ```
+  double? keyboardHeight(Orientation orientation) =>
+      orientation == Orientation.portrait
+      ? portraitKeyboardHeight
+      : landscapeKeyboardHeight;
+
   /// Resolves this preset into a metrics-only [DeviceSimulation] with
   /// [DeviceSimulation.presetId] set.
   ///
@@ -205,13 +273,26 @@ class DevicePreset {
   DeviceSimulation resolve({Orientation orientation = Orientation.portrait}) {
     final EdgeInsets effectivePortraitViewPadding =
         portraitViewPadding ?? portraitPadding;
+    // The bars belong to the simulated device's operating system: stamp the
+    // preset's platform so paint-time behavior (Android tints the bar
+    // backgrounds from the app's `SystemUiOverlayStyle`, iOS never does)
+    // follows the device rather than the host the app runs on.
+    final SystemUiSimulation? resolvedSystemUi = systemUi == null
+        ? null
+        : (systemUi!.platform != null
+              ? systemUi
+              : SystemUiSimulation(
+                  statusBar: systemUi!.statusBar,
+                  navigationBar: systemUi!.navigationBar,
+                  platform: platform,
+                ));
     if (orientation == Orientation.portrait) {
       return DeviceSimulation(
         presetId: id,
         deviceKind: kind,
         screenSize: portraitSize,
         frame: frame,
-        systemUi: systemUi,
+        systemUi: resolvedSystemUi,
         devicePixelRatio: devicePixelRatio,
         padding: portraitPadding,
         viewPadding: effectivePortraitViewPadding,
@@ -233,7 +314,7 @@ class DevicePreset {
       // Frames are described in portrait and rotated at paint time.
       frame: frame,
       // System bars follow the safe areas, which resolve() already rotated.
-      systemUi: systemUi,
+      systemUi: resolvedSystemUi,
       devicePixelRatio: devicePixelRatio,
       padding: resolvedLandscapePadding,
       viewPadding: resolvedLandscapeViewPadding,
@@ -269,6 +350,10 @@ class DevicePreset {
     if (landscapeViewPadding != null)
       'landscapeViewPadding': encodeEdgeInsets(landscapeViewPadding!),
     'systemGestureInsets': encodeEdgeInsets(systemGestureInsets),
+    if (portraitKeyboardHeight != null)
+      'portraitKeyboardHeight': portraitKeyboardHeight,
+    if (landscapeKeyboardHeight != null)
+      'landscapeKeyboardHeight': landscapeKeyboardHeight,
     if (displayFeatures.isNotEmpty)
       'displayFeatures': displayFeatures
           .map((SimulatedDisplayFeature f) => f.toJson())
@@ -295,6 +380,8 @@ class DevicePreset {
         other.landscapePadding == landscapePadding &&
         other.landscapeViewPadding == landscapeViewPadding &&
         other.systemGestureInsets == systemGestureInsets &&
+        other.portraitKeyboardHeight == portraitKeyboardHeight &&
+        other.landscapeKeyboardHeight == landscapeKeyboardHeight &&
         listEquals(other.displayFeatures, displayFeatures) &&
         other.kind == kind;
   }
@@ -315,434 +402,12 @@ class DevicePreset {
     landscapePadding,
     landscapeViewPadding,
     systemGestureInsets,
+    portraitKeyboardHeight,
+    landscapeKeyboardHeight,
     Object.hashAll(displayFeatures),
     kind,
   );
 
   @override
   String toString() => 'DevicePreset($id, $name)';
-}
-
-/// The built-in device preset catalog.
-///
-/// Static const entries: unreferenced presets tree-shake away. Metrics are
-/// logical pixels; iOS landscape insets follow real UIKit behavior
-/// (notch/island mirrored to the sides, 21px home indicator).
-abstract final class DevicePresets {
-  /// iPhone 16 — Dynamic Island.
-  static const DevicePreset iPhone16 = DevicePreset(
-    id: 'apple-iphone-16',
-    name: 'iPhone 16',
-    brand: 'Apple',
-    year: 2024,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(393, 852),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 59, bottom: 34),
-    landscapePadding: EdgeInsets.only(left: 59, right: 59, bottom: 21),
-  );
-
-  /// iPhone 16 Pro — Dynamic Island.
-  static const DevicePreset iPhone16Pro = DevicePreset(
-    id: 'apple-iphone-16-pro',
-    name: 'iPhone 16 Pro',
-    brand: 'Apple',
-    year: 2024,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(402, 874),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 62, bottom: 34),
-    landscapePadding: EdgeInsets.only(left: 62, right: 62, bottom: 21),
-  );
-
-  /// iPhone 16 Pro Max — Dynamic Island.
-  static const DevicePreset iPhone16ProMax = DevicePreset(
-    id: 'apple-iphone-16-pro-max',
-    name: 'iPhone 16 Pro Max',
-    brand: 'Apple',
-    year: 2024,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(440, 956),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 62, bottom: 34),
-    landscapePadding: EdgeInsets.only(left: 62, right: 62, bottom: 21),
-  );
-
-  /// iPhone 16 Plus — Dynamic Island, 6.7" display.
-  static const DevicePreset iPhone16Plus = DevicePreset(
-    id: 'apple-iphone-16-plus',
-    name: 'iPhone 16 Plus',
-    brand: 'Apple',
-    year: 2024,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(430, 932),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 59, bottom: 34),
-    landscapePadding: EdgeInsets.only(left: 59, right: 59, bottom: 21),
-  );
-
-  /// iPhone 16e — notch, the 6.1" entry model.
-  static const DevicePreset iPhone16e = DevicePreset(
-    id: 'apple-iphone-16e',
-    name: 'iPhone 16e',
-    brand: 'Apple',
-    year: 2025,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(390, 844),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 47, bottom: 34),
-    landscapePadding: EdgeInsets.only(left: 47, right: 47, bottom: 21),
-  );
-
-  /// iPhone 17e — notch, the 6.1" entry model.
-  static const DevicePreset iPhone17e = DevicePreset(
-    id: 'apple-iphone-17e',
-    name: 'iPhone 17e',
-    brand: 'Apple',
-    year: 2026,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(390, 844),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 47, bottom: 34),
-    landscapePadding: EdgeInsets.only(left: 47, right: 47, bottom: 21),
-  );
-
-  /// iPhone 17 — Dynamic Island, 6.3" display.
-  static const DevicePreset iPhone17 = DevicePreset(
-    id: 'apple-iphone-17',
-    name: 'iPhone 17',
-    brand: 'Apple',
-    year: 2025,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(402, 874),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 62, bottom: 34),
-    landscapePadding: EdgeInsets.only(left: 62, right: 62, bottom: 21),
-  );
-
-  /// iPhone 17 Pro — Dynamic Island, 6.3" display.
-  static const DevicePreset iPhone17Pro = DevicePreset(
-    id: 'apple-iphone-17-pro',
-    name: 'iPhone 17 Pro',
-    brand: 'Apple',
-    year: 2025,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(402, 874),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 62, bottom: 34),
-    landscapePadding: EdgeInsets.only(left: 62, right: 62, bottom: 21),
-  );
-
-  /// iPhone Air — Dynamic Island, 6.5" display.
-  static const DevicePreset iPhoneAir = DevicePreset(
-    id: 'apple-iphone-air',
-    name: 'iPhone Air',
-    brand: 'Apple',
-    year: 2025,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(420, 912),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 62, bottom: 34),
-    landscapePadding: EdgeInsets.only(left: 62, right: 62, bottom: 21),
-  );
-
-  /// iPad Pro 13" (M4).
-  static const DevicePreset iPadPro13 = DevicePreset(
-    id: 'apple-ipad-pro-13',
-    name: 'iPad Pro 13"',
-    brand: 'Apple',
-    year: 2024,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(1032, 1376),
-    devicePixelRatio: 2.0,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 20),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 20),
-    kind: DeviceKind.tablet,
-  );
-
-  /// iPad Pro 11" (M4).
-  static const DevicePreset iPadPro11 = DevicePreset(
-    id: 'apple-ipad-pro-11',
-    name: 'iPad Pro 11"',
-    brand: 'Apple',
-    year: 2024,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(834, 1210),
-    devicePixelRatio: 2.0,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 20),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 20),
-    kind: DeviceKind.tablet,
-  );
-
-  /// iPad Air 13" (M3).
-  static const DevicePreset iPadAir13 = DevicePreset(
-    id: 'apple-ipad-air-13',
-    name: 'iPad Air 13"',
-    brand: 'Apple',
-    year: 2025,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(1024, 1366),
-    devicePixelRatio: 2.0,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 20),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 20),
-    kind: DeviceKind.tablet,
-  );
-
-  /// iPad Air 11" (M3).
-  static const DevicePreset iPadAir11 = DevicePreset(
-    id: 'apple-ipad-air-11',
-    name: 'iPad Air 11"',
-    brand: 'Apple',
-    year: 2025,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(820, 1180),
-    devicePixelRatio: 2.0,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 20),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 20),
-    kind: DeviceKind.tablet,
-  );
-
-  /// iPad mini (6th/7th generation).
-  static const DevicePreset iPadMini = DevicePreset(
-    id: 'apple-ipad-mini',
-    name: 'iPad mini',
-    brand: 'Apple',
-    year: 2024,
-    platform: TargetPlatform.iOS,
-    portraitSize: ui.Size(744, 1133),
-    devicePixelRatio: 2.0,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 20),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 20),
-    kind: DeviceKind.tablet,
-  );
-
-  /// Google Pixel 9 — gesture navigation.
-  static const DevicePreset pixel9 = DevicePreset(
-    id: 'google-pixel-9',
-    name: 'Pixel 9',
-    brand: 'Google',
-    year: 2024,
-    platform: TargetPlatform.android,
-    portraitSize: ui.Size(412, 923),
-    devicePixelRatio: 2.625,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 24),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 24),
-  );
-
-  /// Google Pixel 10 — gesture navigation.
-  static const DevicePreset pixel10 = DevicePreset(
-    id: 'google-pixel-10',
-    name: 'Pixel 10',
-    brand: 'Google',
-    year: 2025,
-    platform: TargetPlatform.android,
-    portraitSize: ui.Size(412, 923),
-    devicePixelRatio: 2.625,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 24),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 24),
-  );
-
-  /// Google Pixel 10 Pro Fold — 8" inner display, book-style fold with a
-  /// vertical crease at mid-width.
-  static const DevicePreset pixel10ProFold = DevicePreset(
-    id: 'google-pixel-10-pro-fold',
-    name: 'Pixel 10 Pro Fold',
-    brand: 'Google',
-    year: 2025,
-    platform: TargetPlatform.android,
-    portraitSize: ui.Size(852, 883),
-    devicePixelRatio: 2.4375,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 24),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 24),
-    displayFeatures: <SimulatedDisplayFeature>[
-      SimulatedDisplayFeature(
-        bounds: ui.Rect.fromLTRB(426, 0, 426, 883),
-        type: ui.DisplayFeatureType.fold,
-        state: ui.DisplayFeatureState.postureFlat,
-      ),
-    ],
-    kind: DeviceKind.foldable,
-  );
-
-  /// Samsung Galaxy S24 — punch-hole, gesture navigation.
-  static const DevicePreset galaxyS24 = DevicePreset(
-    id: 'samsung-galaxy-s24',
-    name: 'Galaxy S24',
-    brand: 'Samsung',
-    year: 2024,
-    platform: TargetPlatform.android,
-    portraitSize: ui.Size(360, 780),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 24),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 24),
-  );
-
-  /// Samsung Galaxy S25 — punch-hole, gesture navigation.
-  static const DevicePreset galaxyS25 = DevicePreset(
-    id: 'samsung-galaxy-s25',
-    name: 'Galaxy S25',
-    brand: 'Samsung',
-    year: 2025,
-    platform: TargetPlatform.android,
-    portraitSize: ui.Size(360, 780),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 24),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 24),
-  );
-
-  /// Samsung Galaxy Z Flip8 — clamshell fold, horizontal crease at
-  /// mid-height.
-  static const DevicePreset galaxyZFlip8 = DevicePreset(
-    id: 'samsung-galaxy-z-flip-8',
-    name: 'Galaxy Z Flip8',
-    brand: 'Samsung',
-    year: 2026,
-    platform: TargetPlatform.android,
-    portraitSize: ui.Size(360, 840),
-    devicePixelRatio: 3.0,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 24),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 24),
-    displayFeatures: <SimulatedDisplayFeature>[
-      SimulatedDisplayFeature(
-        bounds: ui.Rect.fromLTRB(0, 420, 360, 420),
-        type: ui.DisplayFeatureType.fold,
-        state: ui.DisplayFeatureState.postureFlat,
-      ),
-    ],
-    kind: DeviceKind.foldable,
-  );
-
-  /// Samsung Galaxy Z Fold8 — 7.6" inner display; the wide-format fold
-  /// opens vertically, so the crease is horizontal at mid-height.
-  static const DevicePreset galaxyZFold8 = DevicePreset(
-    id: 'samsung-galaxy-z-fold-8',
-    name: 'Galaxy Z Fold8',
-    brand: 'Samsung',
-    year: 2026,
-    platform: TargetPlatform.android,
-    portraitSize: ui.Size(731, 979),
-    devicePixelRatio: 2.5,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 24),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 24),
-    displayFeatures: <SimulatedDisplayFeature>[
-      SimulatedDisplayFeature(
-        bounds: ui.Rect.fromLTRB(0, 489.5, 731, 489.5),
-        type: ui.DisplayFeatureType.fold,
-        state: ui.DisplayFeatureState.postureFlat,
-      ),
-    ],
-    kind: DeviceKind.foldable,
-  );
-
-  /// Samsung Galaxy Z Fold8 Ultra — 8" inner display, book-style fold with
-  /// a vertical crease at mid-width.
-  static const DevicePreset galaxyZFold8Ultra = DevicePreset(
-    id: 'samsung-galaxy-z-fold-8-ultra',
-    name: 'Galaxy Z Fold8 Ultra',
-    brand: 'Samsung',
-    year: 2026,
-    platform: TargetPlatform.android,
-    portraitSize: ui.Size(860, 954),
-    devicePixelRatio: 2.625,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 24),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 24),
-    displayFeatures: <SimulatedDisplayFeature>[
-      SimulatedDisplayFeature(
-        bounds: ui.Rect.fromLTRB(430, 0, 430, 954),
-        type: ui.DisplayFeatureType.fold,
-        state: ui.DisplayFeatureState.postureFlat,
-      ),
-    ],
-    kind: DeviceKind.foldable,
-  );
-
-  /// Samsung Galaxy Tab S10+.
-  static const DevicePreset galaxyTabS10Plus = DevicePreset(
-    id: 'samsung-galaxy-tab-s10-plus',
-    name: 'Galaxy Tab S10+',
-    brand: 'Samsung',
-    year: 2024,
-    platform: TargetPlatform.android,
-    portraitSize: ui.Size(876, 1400),
-    devicePixelRatio: 2.0,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 24),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 24),
-    kind: DeviceKind.tablet,
-  );
-
-  /// Samsung Galaxy Tab S11.
-  static const DevicePreset galaxyTabS11 = DevicePreset(
-    id: 'samsung-galaxy-tab-s11',
-    name: 'Galaxy Tab S11',
-    brand: 'Samsung',
-    year: 2025,
-    platform: TargetPlatform.android,
-    portraitSize: ui.Size(800, 1280),
-    devicePixelRatio: 2.0,
-    portraitPadding: EdgeInsets.only(top: 24, bottom: 24),
-    landscapePadding: EdgeInsets.only(top: 24, bottom: 24),
-    kind: DeviceKind.tablet,
-  );
-
-  /// A small desktop window: 1024×640 at 1x.
-  static const DevicePreset smallDesktopWindow = DevicePreset(
-    id: 'desktop-small',
-    name: 'Small Desktop Window',
-    brand: 'Generic',
-    platform: TargetPlatform.windows,
-    portraitSize: ui.Size(1024, 640),
-    devicePixelRatio: 1.0,
-    kind: DeviceKind.desktop,
-  );
-
-  /// A large desktop window: 1920×1080 at 2x.
-  static const DevicePreset largeDesktopWindow = DevicePreset(
-    id: 'desktop-large',
-    name: 'Large Desktop Window',
-    brand: 'Generic',
-    platform: TargetPlatform.macOS,
-    portraitSize: ui.Size(1920, 1080),
-    devicePixelRatio: 2.0,
-    kind: DeviceKind.desktop,
-  );
-
-  /// All built-in presets.
-  static const List<DevicePreset> all = <DevicePreset>[
-    iPhone16,
-    iPhone16Plus,
-    iPhone16Pro,
-    iPhone16ProMax,
-    iPhone16e,
-    iPhone17e,
-    iPhone17,
-    iPhone17Pro,
-    iPhoneAir,
-    iPadPro13,
-    iPadPro11,
-    iPadAir13,
-    iPadAir11,
-    iPadMini,
-    pixel9,
-    pixel10,
-    pixel10ProFold,
-    galaxyS24,
-    galaxyS25,
-    galaxyZFlip8,
-    galaxyZFold8,
-    galaxyZFold8Ultra,
-    galaxyTabS10Plus,
-    galaxyTabS11,
-    smallDesktopWindow,
-    largeDesktopWindow,
-  ];
-
-  /// Returns the built-in preset with the given [id], or null.
-  static DevicePreset? byId(String id) {
-    for (final DevicePreset preset in all) {
-      if (preset.id == id) {
-        return preset;
-      }
-    }
-    return null;
-  }
 }

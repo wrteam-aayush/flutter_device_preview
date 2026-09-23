@@ -1,7 +1,154 @@
 # Changelog
 
-## Unreleased
+## 3.0.0
 
+The stable 3.0 release — a from-scratch rebuild of Device Preview. If you are
+coming from 2.x, see **Migrating from 2.x** in the README: the integration is
+now a single line and the in-app toolbar is gone.
+
+The one-paragraph version: a custom `WidgetsBinding` simulates device
+characteristics (screen metrics, safe areas, orientation, folds, keyboard
+insets, locales, brightness, text scale, accessibility flags, 24-hour time,
+target platform) at the engine-abstraction level, so your app reads them
+through the same `MediaQuery`, layout and locale-resolution paths it uses on a
+real device — no widget wrapper, no in-app UI, nothing shipped in release
+builds. The simulation is driven from the bundled **Flutter DevTools
+extension**, from Dart through `DevicePreview.controller`, or from widget
+tests via `DevicePreviewBindingMixin`.
+
+Highlights, relative to 2.x:
+
+- **One-line integration**: `DevicePreview.enable(); runApp(MyApp());` — no
+  builder wrapper, no `useInheritedMediaQuery`, no `locale`/`builder` glue on
+  your `MaterialApp`. Off in release builds by default, with zero footprint.
+- **Full framework fidelity**: because the simulation sits below the widget
+  layer, safe areas, hit-testing, locale resolution, text scaling and
+  accessibility flags behave exactly as they do on device — including
+  third-party packages that never heard of Device Preview.
+- **The UI moved to DevTools**: a device picker with framed previews, locale
+  and accessibility controls, orientation, text scale, dark mode, a
+  screenshot button, and a "New device from JSON…" entry that saves custom
+  devices in the browser.
+- **Programmatic + test control**: `applyPreset`, `setOrientation`,
+  `update(copyWith)`, `applyJson`, `registerPreset`, `reset` — and the same
+  simulation in widget tests for golden matrices over many devices.
+- **A rebuilt device catalog** (33 devices): every Apple frame and metric is
+  extracted from the real iOS Simulator (Xcode 26.6 / iOS 26.5) and the
+  Pixels from the official Android emulator skins (Android 16), artwork
+  included; four foldables report their hinge as a display feature; generic
+  phone/tablet/desktop windows round it out. Presets carry their frame and
+  simulated system UI and tree-shake away when unreferenced.
+- **Device frames & system UI in-app too**: `applyPreset` shows the framed
+  device with a live-tinted status bar and gesture pill even without DevTools
+  attached (goldens, CI), painted over the default `DotGridDecoration`
+  letterbox.
+- **Touch input simulation**: the mouse is reported to the app as a finger on
+  touch devices (auto by default), so drags scroll and gestures take their
+  touch paths.
+- **A simulated software keyboard**: every device carries the height its
+  keyboard covers, per orientation — probed from its own simulator for the
+  iPhones and iPads, one shared default for the Android devices, whose
+  keyboard height belongs to the installed IME — and one switch in DevTools (or
+  `DeviceSimulation.keyboardInset` from Dart) raises it. It arrives as
+  `MediaQuery.viewInsets.bottom`, so `resizeToAvoidBottomInset`,
+  scroll-into-view and the collapsing bottom safe area all behave as they do
+  on the device — which is how a form gets checked against the keyboard from
+  a desktop that has none. While a device is simulated it is also the *only*
+  keyboard the app sees: the host's own keyboard inset is no longer mapped
+  into the simulated screen, where it stood for a length of the wrong
+  display.
+- The simulated system bars now follow the **simulated device's** operating
+  system, not the host's: `SystemUiSimulation.platform` (stamped from the
+  preset by `DevicePreset.resolve` and by the DevTools panel) decides the
+  platform-specific paint behavior, so an app running on an Android host no
+  longer tints a simulated iPhone's status bar and home-indicator band with
+  its Android `SystemUiOverlayStyle` background colors.
+
+Breaking (from the prereleases, for completeness): `DevicePreview.enable`'s
+flag is the named `enabled` parameter; iPad preset ids/names carry their chip
+(`iPadPro11M4`, …); minimum Flutter is 3.47.0 / Dart 3.8.
+
+## 3.0.0-prerelease6
+
+- The iPhone SE (3rd gen) home button ring is now a dark grey instead of the
+  white Xcode strokes it with, so it no longer glows against the dark
+  letterbox.
+
+## 3.0.0-prerelease5
+
+- The built-in `DevicePresets` are now generated from the shared device spec
+  catalog (`device_specs/` at the repository root) and carry the **complete
+  spec — frame artwork and system UI included** — identical to what the
+  DevTools panel pushes. `applyPreset` therefore shows the framed device
+  without DevTools attached (golden tests, CI). Every preset keeps its name
+  and id; unreferenced presets still tree-shake away, artwork included.
+  Regenerate with `dart run tool/generate_presets.dart` after editing a spec
+  (a guard test fails when the checked-in catalog is stale).
+- The area around the simulated device is now painted by default with the
+  new `DotGridDecoration`: a dark grey with a subtle dot pattern (in real
+  pixels, so its density does not change with the device or the fit scale),
+  which keeps dark device bodies readable where the engine's plain black
+  swallowed them. `DevicePreview.enable`'s `backgroundDecoration` now
+  accepts any `Decoration` (not only `BoxDecoration`), is painted in real
+  logical pixels, and `null` now explicitly leaves the area unpainted.
+- New `DevicePreviewController.applyJson(json)`: decodes a device spec
+  (a JSON string or map in the `device_specs/*.json` / `DevicePreset.toJson()`
+  format, frame artwork and system UI included), registers it as a preset and
+  applies it.
+- DevTools: the device picker gains a "New device from JSON…" entry. Pasted
+  specs are validated, applied immediately, saved in the browser and listed
+  under "My devices" in later sessions (with a remove button).
+- The Apple catalog now mirrors the iOS 26.5 simulator line-up (21 devices,
+  33 in all), every one derived from its real simulator: added iPhone 17 Pro
+  Max, iPhone SE (3rd gen) — back as `DevicePresets.iPhoneSe3`, with the
+  Home-button chassis, a 20 pt status bar and no other safe area — iPad Pro
+  11"/13" (M5), iPad Air 11"/13" (M2) and (M4), iPad (A16) and iPad (10th
+  gen). The iPad Airs' M3 entries became the M4 generation (same chassis and
+  metrics). Removed iPhone 16e (`DevicePresets.iPhone16e`), which Xcode no
+  longer offers as an iOS 26.5 destination.
+- **Breaking**: the iPad ids and preset names now carry their chip so the
+  generations can coexist: `apple-ipad-pro-11` → `apple-ipad-pro-11-m4`
+  (`DevicePresets.iPadPro11M4`), `apple-ipad-air-11` →
+  `apple-ipad-air-11-m4` (`iPadAir11M4`), and likewise for the 13" models;
+  `apple-ipad-mini` keeps its id but is named "iPad mini (A17 Pro)".
+
+## 3.0.0-prerelease4
+
+- The iPhone and iPad frames are now derived from the official iOS
+  Simulator bezel artwork (Xcode's "Show Device Bezels" chrome): exact
+  body sizes, bezel borders, Apple's own outer corner radii, and the true
+  continuous-curvature display outlines from the simulator framebuffer
+  masks, notch and Dynamic Island included. See
+  `.claude/skills/extract-cupertino-specs/` for the extraction process.
+- Apple metrics are now verified against a live simulator: a probe app is
+  booted per device type and reports the safe areas UIKit actually applies.
+  The iPhone values were confirmed exact; every iPad's bottom safe-area
+  inset was corrected from 20 to 25 logical pixels (both orientations), in
+  the specs and the built-in `DevicePresets`.
+- Every Apple device in the catalog now has its own real simulator (Xcode
+  26.6 device profiles, probed on iOS 26.5): the iPhone 16e, 17, 17 Pro,
+  17e and Air no longer borrow another model's artwork or hand-modelled
+  metrics — the 16e/17e notch outline and the Air's squircle come from
+  Apple's own framebuffer masks, and the iPad Airs use the M3 chassis (59
+  pt bezel). Safe areas follow iOS 26: every iPad's top inset is 32 (was
+  24), landscape iPhones report a 20 pt bottom inset (was 21), and the
+  iPhone Air's Dynamic Island band is 68 (was 62). Specs, `DevicePresets`,
+  fixtures and the bundled catalog updated together.
+- The Google Pixel specs are now derived the same way, by an Android
+  counterpart skill (`.claude/skills/extract-pixel-specs/`): frame artwork,
+  screen shape and the camera punch-hole cutout come from the official
+  emulator device skins (Android Studio 2026.1), and the metrics from a
+  booted Android 16 emulator. Pixel 9/10 sizes are now the exact
+  411.43×923.43 a device reports (was the rounded 412×923), the fold is
+  851.69×882.87 with its crease recentred accordingly, and the safe areas
+  match today's Android 16 system bars — including its taller status bar
+  (54 dp portrait / 52 landscape on the slabs; 36/56 on the fold, bottom
+  24 and 32 respectively). Specs, built-in `DevicePresets` and the bundled
+  catalog all updated together; the frames now show each device's punch
+  hole (top-centre on the slabs, top-right on the fold's inner display).
+- Compatibility with Flutter 3.47: `PreviewPlatformDispatcher` forwards
+  the new `PlatformDispatcher.onHitTest` callback. The minimum Flutter
+  version is now 3.47.0.
 - Four foldable presets — the catalog's first: Pixel 10 Pro Fold
   (`DevicePresets.pixel10ProFold`), Galaxy Z Fold8 (`galaxyZFold8`),
   Galaxy Z Fold8 Ultra (`galaxyZFold8Ultra`) and Galaxy Z Flip8

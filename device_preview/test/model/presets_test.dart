@@ -7,10 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('DevicePresets catalog', () {
-    test('contains the 26 documented presets with unique ids', () {
-      expect(DevicePresets.all, hasLength(26));
+    test('contains the 33 documented presets with unique ids', () {
+      expect(DevicePresets.all, hasLength(33));
       final ids = DevicePresets.all.map((p) => p.id).toSet();
-      expect(ids, hasLength(26));
+      expect(ids, hasLength(33));
     });
 
     test('every device preset declares a release year', () {
@@ -81,11 +81,13 @@ void main() {
         DevicePresets.iPhone16Plus.portraitSize,
         const ui.Size(430, 932),
       );
-      expect(DevicePresets.iPhone16e.portraitSize, const ui.Size(390, 844));
+      expect(DevicePresets.iPhoneSe3.portraitSize, const ui.Size(375, 667));
+      expect(DevicePresets.iPhoneSe3.devicePixelRatio, 2.0);
       expect(
-        DevicePresets.iPhone16e.portraitPadding,
-        const EdgeInsets.only(top: 47, bottom: 34), // notch, not an island
+        DevicePresets.iPhoneSe3.portraitPadding,
+        const EdgeInsets.only(top: 20), // status bar only, Home button
       );
+      expect(DevicePresets.iPhoneSe3.landscapePadding, EdgeInsets.zero);
       expect(DevicePresets.iPhone16Pro.portraitSize, const ui.Size(402, 874));
       expect(DevicePresets.iPhone16Pro.devicePixelRatio, 3.0);
       expect(
@@ -95,6 +97,10 @@ void main() {
       expect(DevicePresets.iPhone17.portraitSize, const ui.Size(402, 874));
       expect(DevicePresets.iPhone17Pro.portraitSize, const ui.Size(402, 874));
       expect(DevicePresets.iPhone17Pro.devicePixelRatio, 3.0);
+      expect(
+        DevicePresets.iPhone17ProMax.portraitSize,
+        const ui.Size(440, 956),
+      );
       expect(DevicePresets.iPhone17e.portraitSize, const ui.Size(390, 844));
       expect(
         DevicePresets.iPhone17e.portraitPadding,
@@ -102,15 +108,31 @@ void main() {
       );
       expect(DevicePresets.iPhoneAir.portraitSize, const ui.Size(420, 912));
       expect(DevicePresets.iPhoneAir.year, 2025);
-      expect(DevicePresets.iPadPro13.portraitSize, const ui.Size(1032, 1376));
-      expect(DevicePresets.iPadPro13.kind, DeviceKind.tablet);
-      expect(DevicePresets.iPadPro11.portraitSize, const ui.Size(834, 1210));
-      expect(DevicePresets.iPadAir13.portraitSize, const ui.Size(1024, 1366));
-      expect(DevicePresets.iPadAir11.portraitSize, const ui.Size(820, 1180));
-      expect(DevicePresets.iPadAir11.year, 2025);
-      expect(DevicePresets.pixel9.portraitSize, const ui.Size(412, 923));
+      expect(
+        DevicePresets.iPadPro13M5.portraitSize,
+        const ui.Size(1032, 1376),
+      );
+      expect(DevicePresets.iPadPro13M5.kind, DeviceKind.tablet);
+      expect(DevicePresets.iPadPro11M5.portraitSize, const ui.Size(834, 1210));
+      expect(
+        DevicePresets.iPadPro13M4.portraitSize,
+        const ui.Size(1032, 1376),
+      );
+      expect(DevicePresets.iPadPro11M4.portraitSize, const ui.Size(834, 1210));
+      expect(
+        DevicePresets.iPadAir13M4.portraitSize,
+        const ui.Size(1024, 1366),
+      );
+      expect(DevicePresets.iPadAir11M4.portraitSize, const ui.Size(820, 1180));
+      expect(DevicePresets.iPadAir11M4.year, 2026);
+      expect(DevicePresets.iPadAir11M2.portraitSize, const ui.Size(820, 1180));
+      expect(DevicePresets.iPadAir11M2.year, 2024);
+      expect(DevicePresets.iPadA16.portraitSize, const ui.Size(820, 1180));
+      expect(DevicePresets.iPad10.portraitSize, const ui.Size(820, 1180));
+      expect(DevicePresets.iPad10.year, 2022);
+      expect(DevicePresets.pixel9.portraitSize, const ui.Size(411.43, 923.43));
       expect(DevicePresets.pixel9.devicePixelRatio, 2.625);
-      expect(DevicePresets.pixel10.portraitSize, const ui.Size(412, 923));
+      expect(DevicePresets.pixel10.portraitSize, const ui.Size(411.43, 923.43));
       expect(DevicePresets.pixel10.year, 2025);
       expect(DevicePresets.galaxyS24.portraitSize, const ui.Size(360, 780));
       expect(DevicePresets.galaxyS24.devicePixelRatio, 3.0);
@@ -176,7 +198,7 @@ void main() {
       );
       expect(
         sim.padding,
-        const EdgeInsets.only(left: 59, right: 59, bottom: 21),
+        const EdgeInsets.only(left: 59, right: 59, bottom: 20),
       );
       expect(sim.viewPadding, sim.padding);
     });
@@ -313,6 +335,52 @@ void main() {
         );
         expect(decoded, preset);
       }
+    });
+
+    test('keyboard heights round-trip and default to null', () {
+      const preset = DevicePreset(
+        id: 'x',
+        name: 'X',
+        platform: TargetPlatform.iOS,
+        portraitSize: Size(400, 800),
+        devicePixelRatio: 2,
+        portraitKeyboardHeight: 291,
+        landscapeKeyboardHeight: 209,
+      );
+      final json = preset.toJson();
+      expect(json['portraitKeyboardHeight'], 291.0);
+      expect(json['landscapeKeyboardHeight'], 209.0);
+      expect(DevicePreset.fromJson(json), preset);
+
+      final bare = DevicePreset.fromJson(<String, Object?>{
+        'id': 'y',
+        'name': 'Y',
+        'platform': 'android',
+        'portraitSize': {'width': 100, 'height': 200},
+        'devicePixelRatio': 2,
+      });
+      expect(bare.portraitKeyboardHeight, isNull);
+      expect(bare.toJson().containsKey('portraitKeyboardHeight'), isFalse);
+    });
+
+    test('keyboardHeight picks the orientation, resolve never raises it', () {
+      const preset = DevicePreset(
+        id: 'x',
+        name: 'X',
+        platform: TargetPlatform.iOS,
+        portraitSize: Size(400, 800),
+        devicePixelRatio: 2,
+        portraitKeyboardHeight: 291,
+        landscapeKeyboardHeight: 209,
+      );
+      expect(preset.keyboardHeight(Orientation.portrait), 291);
+      expect(preset.keyboardHeight(Orientation.landscape), 209);
+      // A preset describes the device, not what it is currently showing.
+      expect(preset.resolve().keyboardInset, isNull);
+      expect(
+        preset.resolve(orientation: Orientation.landscape).keyboardInset,
+        isNull,
+      );
     });
 
     test('fromJson ignores unknown keys and applies defaults', () {
